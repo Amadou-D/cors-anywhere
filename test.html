@@ -2,55 +2,72 @@
 <html>
 <head>
   <title>RSS Feed Reader</title>
+  <style>
+    .article {
+      margin-bottom: 1em; /* Add some space between articles */
+      border-bottom: 1px solid #ddd; /* Optional: add a separator line */
+    }
+  </style>
 </head>
 <body>
   <h1>RSS Feed Reader</h1>
 
   <button id="fetchButton">Fetch Feed</button>
 
-  <p id="results"></p>
+  <div id="results"></div>
 
   <script>
-const feedUrl = "http://localhost:8080/https://www.cbc.ca/webfeed/rss/rss-canada";
+    const feedUrl = "http://localhost:8080/https://theconversation.com/ca/articles.atom";
 
-  async function getFeedData(feedUrl) {
-    try {
-      const response = await fetch(feedUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch feed data: ${response.statusText}`);
+    async function getFeedData(feedUrl) {
+      try {
+        const response = await fetch(feedUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch feed data: ${response.statusText}`);
+        }
+        const data = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(data, "application/xml");
+
+        const items = Array.from(doc.querySelectorAll("entry"));
+        return items.map(item => ({
+          title: item.querySelector("title").textContent,
+          author: Array.from(item.querySelectorAll("author name")).map(author => author.textContent).join(", "),
+          link: item.querySelector("link[rel='alternate']").getAttribute("href"),
+          description: item.querySelector("summary")?.textContent || item.querySelector("content")?.textContent || "",
+        }));
+      } catch (error) {
+        console.error("Error fetching feed:", error);
+        return Promise.reject(error); // Propagate the error for handling in the click event listener
       }
-      const data = await response.text();
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(data, "text/xml");
-      return {
-        title: doc.querySelector("title").textContent,
-        descriptions: Array.from(doc.querySelectorAll("item description"))
-          .map(element => element.textContent)
-      };
-    } catch (error) {
-      console.error("Error fetching feed:", error);
-      return Promise.reject(error); // Propagate the error for handling in the click event listener
     }
-  }
 
-  const resultsElement = document.getElementById("results");
+    const resultsElement = document.getElementById("results");
 
-  const fetchButton = document.getElementById("fetchButton");
-  fetchButton.addEventListener("click", async () => {
-    try {
-      const data = await getFeedData(feedUrl);
-      resultsElement.innerHTML = `<h3>Feed Title: ${data.title}</h3>`;
-      resultsElement.innerHTML += "<ul>";
-      data.descriptions.forEach(description => {
-        resultsElement.innerHTML += `<li>${description}</li>`;
-      });
-      resultsElement.innerHTML += "</ul>";
-    } catch (error) {
-      // Handle errors (e.g., display an error message to the user)
-      resultsElement.textContent = "Error fetching feed data.";
-      console.error("Error fetching feed:", error);
-    }
-  });
+    const fetchButton = document.getElementById("fetchButton");
+    fetchButton.addEventListener("click", async () => {
+      try {
+        const articles = await getFeedData(feedUrl);
+        console.log(articles);
+
+        resultsElement.innerHTML = ""; // Clear previous content
+
+        articles.forEach(article => {
+          const content = `
+            <div class="article">
+              <h3><a href="${article.link}" target="_blank">${article.title}</a></h3>
+              <p class="author">By ${article.author}</p>
+              <p class="description">${article.description}</p>
+            </div>
+          `;
+
+          resultsElement.innerHTML += content;
+        });
+      } catch (error) {
+        resultsElement.textContent = "Error fetching feed data.";
+        console.error("Error fetching feed:", error);
+      }
+    });
   </script>
 </body>
 </html>
